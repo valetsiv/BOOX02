@@ -11,136 +11,152 @@
     <div class="brand">
       <div class="dot"></div>
       <div>
-        <div class="brandTitle">Tense Builder</div>
-        <div class="brandSub">Speak • Compare • Level up</div>
+        <div class="title">Tense Builder</div>
+        <div class="sub">Speak • Compare • Level up</div>
       </div>
     </div>
 
-    <div class="topActions">
-      <button id="btnNew" class="btn primary">New unit</button>
-    </div>
+    <button id="btnNewUnit" class="btn btnPrimary" type="button">New unit</button>
   </header>
 
   <main class="wrap">
-    <section class="card">
+    <section class="card cardMain">
       <div class="cardHead">
         <div>
           <div class="h1">Current target</div>
-          <div class="muted">Short → longer → level up (words in red = practice)</div>
+          <div class="hint">Short → random → progress (red words = practice)</div>
         </div>
-        <div class="stats">
-          <div class="pill"><div class="k">Level</div><div id="statLevel" class="v">1</div></div>
-          <div class="pill"><div class="k">Score</div><div id="statScore" class="v">0</div></div>
-          <div class="pill"><div class="k">Streak</div><div id="statStreak" class="v">0</div></div>
+
+        <div class="badges">
+          <div class="badge"><div class="bLab">Unit</div><div id="uiUnit" class="bVal">1</div></div>
+          <div class="badge"><div class="bLab">Score</div><div id="uiScore" class="bVal">0</div></div>
+          <div class="badge"><div class="bLab">Streak</div><div id="uiStreak" class="bVal">0</div></div>
         </div>
       </div>
 
-      <div class="targetBox">
+      <div id="targetBox" class="targetBox">
         <div id="targetText" class="targetText">—</div>
-        <div id="glossary" class="glossary" hidden></div>
+        <div id="targetEs" class="targetEs hidden">—</div>
       </div>
 
       <div class="rowBtns">
-        <button id="btnSpeak" class="btn">🔊 Speak</button>
-        <button id="btnMic" class="btn">🎙️ Start mic</button>
-        <button id="btnTranslate" class="btn ghost">🌐 Translate</button>
-        <button id="btnShow" class="btn ghost">👁 Show answer</button>
+        <button id="btnSpeak" class="btn" type="button">🔊 Speak</button>
+        <button id="btnMic" class="btn" type="button">🎙️ Start mic</button>
+        <button id="btnTranslate" class="btn" type="button">🌐 Translate</button>
+        <button id="btnShow" class="btn" type="button">👁️ Show answer</button>
       </div>
 
       <div class="grid2">
-        <div class="cardMini">
-          <div class="h2">What the mic heard</div>
-          <textarea id="heardText" class="ta" placeholder="Press Start mic, speak, then press Check…"></textarea>
-          <div class="rowBtns2">
-            <button id="btnCheck" class="btn ok">✅ Check</button>
-            <button id="btnSkip" class="btn ghost">⏭ Skip</button>
+        <div class="panel">
+          <div class="pTitle">What the mic heard</div>
+          <textarea id="heardText" class="ta" placeholder="Press Start mic, speak, then press Check… (or type here)"></textarea>
+
+          <div class="rowBtns bottomRow">
+            <button id="btnCheck" class="btn btnGood" type="button">✅ Check</button>
+            <button id="btnSkip" class="btn" type="button">⏭️ Skip</button>
           </div>
+
           <div id="status" class="status">Ready.</div>
         </div>
 
-        <div class="cardMini">
-          <div class="h2">Word feedback</div>
-          <div id="feedback" class="feedback">—</div>
+        <div class="panel">
+          <div class="pTitle">Word feedback</div>
+          <div id="wordFeedback" class="feedback">—</div>
+          <div class="smallNote">Tip: aim for clean rhythm. It’s okay if your accent is yours.</div>
         </div>
       </div>
 
-      <div class="medalsHead">
-        <div>
-          <div class="h2">Rescued characters</div>
-          <div class="muted">Finish Level 100 to unlock a character.</div>
+      <div class="medals">
+        <div class="medalsHead">
+          <div>
+            <div class="pTitle">Rescued characters</div>
+            <div class="hint">Reach <b>100</b> points to unlock 1 character.</div>
+          </div>
+          <div id="uiRescued" class="rescuedCount">0/15</div>
         </div>
-        <div id="medalCount" class="muted">0/0</div>
+
+        <div id="medalGrid" class="medalGrid"></div>
       </div>
-      <div id="medals" class="medals"></div>
     </section>
 
-    <aside class="card settings">
+    <aside class="card cardSide">
       <div class="h1">Settings</div>
 
       <div class="field">
-        <label>Mode</label>
-        <select id="selMode">
+        <label for="modeSel">Mode</label>
+        <select id="modeSel">
           <option value="statements">Statements</option>
           <option value="questions">Questions</option>
         </select>
       </div>
 
-      <div class="field">
-        <label>Question type</label>
-        <select id="selQType">
+      <div class="field" id="questionFields">
+        <label for="qTypeSel">Question type</label>
+        <select id="qTypeSel">
           <option value="yesno">Yes/No</option>
-          <option value="wh">WH</option>
+          <option value="wh">WH (What/Where/When/Why/How)</option>
         </select>
+
+        <div class="miniRow">
+          <select id="whSel">
+            <option value="what">What</option>
+            <option value="where">Where</option>
+            <option value="when">When</option>
+            <option value="why">Why</option>
+            <option value="how">How</option>
+          </select>
+        </div>
       </div>
 
       <div class="field">
-        <label>Tense</label>
-        <select id="selTense">
+        <label for="tenseSel">Tense</label>
+        <select id="tenseSel">
           <option value="present_simple">Present Simple</option>
           <option value="present_cont">Present Continuous</option>
+          <option value="past_simple">Past Simple</option>
+          <option value="past_cont">Past Continuous</option>
           <option value="present_perf">Present Perfect</option>
           <option value="future_will">Future (will)</option>
+          <option value="modals">Modals (can/should/must/might)</option>
+          <option value="cond0">Conditional 0</option>
+          <option value="cond1">Conditional 1</option>
+          <option value="cond2">Conditional 2</option>
         </select>
       </div>
 
       <div class="field">
-        <label>Voice (TTS)</label>
-        <select id="selVoice"></select>
+        <label for="ttsVoice">Voice (TTS)</label>
+        <select id="ttsVoice">
+          <option value="">Loading voices…</option>
+        </select>
       </div>
 
       <div class="field">
-        <label>Recognition language</label>
-        <select id="selRecLang">
+        <label for="sttLang">Recognition language</label>
+        <select id="sttLang">
           <option value="en-US">English (US)</option>
           <option value="en-GB">English (UK)</option>
+          <option value="en-AU">English (AU)</option>
         </select>
       </div>
 
-      <div class="field row">
-        <label class="toggle">
-          <input id="chkAntiEcho" type="checkbox" checked />
-          <span>Anti‑echo (pause mic while TTS)</span>
-        </label>
+      <div class="field checkRow">
+        <input id="antiEcho" type="checkbox" checked />
+        <label for="antiEcho">Anti-echo (pause mic while TTS speaks)</label>
       </div>
-
       <div class="divider"></div>
-      <div class="muted small">
-        Tip: for mic stability, open with <b>http://localhost</b> (not file://).
-      </div>
-    </aside>
+</aside>
   </main>
 
-  <div id="modal" class="modal" hidden>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modalCard">
-      <div class="modalTitle">You rescued a character!</div>
-      <div class="modalBody">
-        <img id="modalImg" class="modalImg" alt="character" />
-        <div id="modalText" class="modalText"></div>
-      </div>
-      <button id="btnModalOk" class="btn primary">Awesome</button>
+      <div id="modalTitle" class="modalTitle">You rescued a character!</div>
+      <img id="modalImg" class="modalImg" alt="character medal" />
+      <div id="modalMsg" class="modalMsg">Awesome!</div>
+      <button id="modalOk" class="btn btnPrimary" type="button">Awesome</button>
     </div>
   </div>
 
-  <script src="app_routes_fixed.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
