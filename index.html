@@ -22,12 +22,11 @@
   </header>
 
   <main class="wrap">
-    <!-- LEFT: game -->
     <section class="card">
       <div class="cardHead">
         <div>
           <div class="h1">Current target</div>
-          <div class="muted">Listen → speak → check → get feedback (words in red = practice)</div>
+          <div class="muted">Short → longer → level up (words in red = practice)</div>
         </div>
         <div class="stats">
           <div class="pill"><div class="k">Level</div><div id="statLevel" class="v">1</div></div>
@@ -75,7 +74,6 @@
       <div id="medals" class="medals"></div>
     </section>
 
-    <!-- RIGHT: settings -->
     <aside class="card settings">
       <div class="h1">Settings</div>
 
@@ -90,8 +88,8 @@
       <div class="field">
         <label>Question type</label>
         <select id="selQType">
-          <option value="yesno">Yes/No (Do/Does/Did/Have…)</option>
-          <option value="wh">WH (What/Where/When/Why/How…)</option>
+          <option value="yesno">Yes/No</option>
+          <option value="wh">WH</option>
         </select>
       </div>
 
@@ -100,13 +98,8 @@
         <select id="selTense">
           <option value="present_simple">Present Simple</option>
           <option value="present_cont">Present Continuous</option>
-          <option value="past_cont">Past Continuous</option>
           <option value="present_perf">Present Perfect</option>
           <option value="future_will">Future (will)</option>
-          <option value="conditional_0">Conditional 0</option>
-          <option value="conditional_1">Conditional 1</option>
-          <option value="conditional_2">Conditional 2</option>
-          <option value="modals">Modals (can/should/must/might)</option>
         </select>
       </div>
 
@@ -132,24 +125,22 @@
 
       <div class="divider"></div>
       <div class="muted small">
-        Tip: If you open as <b>file://</b>, Chrome may ask mic permission more often.
-        Best: open with <b>http://localhost</b>.
+        Tip: for mic stability, open with <b>http://localhost</b> (not file://).
       </div>
     </aside>
   </main>
 
-  <!-- Unlock modal -->
   <div id="modal" class="modal" hidden>
     <div class="modalCard">
       <div class="modalTitle">You rescued a character!</div>
       <div class="modalBody">
-        <img id="modalImg" class="modalImg" alt="medal" />
+        <img id="modalImg" class="modalImg" alt="character" />
         <div id="modalText" class="modalText"></div>
       </div>
       <button id="btnModalOk" class="btn primary">Awesome</button>
     </div>
   </div>
 
-  <script src="app_routes_fixed.js"></script>
+  <script src="app_v1.js"></script>
 </body>
 </html>
