@@ -1,593 +1,454 @@
-(() => {
-  // =========================================================
-  // TENSE BUILDER — v1 (short phrases that grow)
-  // - frases cortas
-  // - cada nivel agrega 1 chunk corto
-  // - 100 verbos + 100 palabras/objetos
-  // - mic "warm-up" + retry para evitar no-speech
-  // =========================================================
+/* =========================================================
+   APP — Mini Tolerance + Short phrases that grow
+   - SpeechRecognition warm-up + retry on "no-speech"
+   - Interim results + maxAlternatives
+   - Phrases start short and add 1 chunk per level
+   - 100 verbs + 100 words
+   ========================================================= */
 
-  if (window.__TB_INITED__) return;
-  window.__TB_INITED__ = true;
+(() => {
+  "use strict";
 
   // -------------------------
-  // DOM
+  // 0) DOM helpers
   // -------------------------
   const $ = (id) => document.getElementById(id);
 
-  const btnNew       = $("btnNew");
-  const btnSpeak     = $("btnSpeak");
-  const btnMic       = $("btnMic");
-  const btnTranslate = $("btnTranslate");
-  const btnShow      = $("btnShow");
-  const btnCheck     = $("btnCheck");
-  const btnSkip      = $("btnSkip");
-  const btnModalOk   = $("btnModalOk");
+  // REQUIRED ids (match your HTML)
+  const elTarget   = $("targetText");
+  const elHeard    = $("heardText");
+  const elStatus   = $("statusText");
+  const elLevel    = $("levelVal");
+  const elScore    = $("scoreVal");
+  const elStreak   = $("streakVal");
 
-  const targetText = $("targetText");
-  const heardText  = $("heardText");
-  const feedback   = $("feedback");
-  const glossary   = $("glossary");
-  const statusEl   = $("status");
+  const btnMic     = $("btnMic");
+  const btnCheck   = $("btnCheck");
+  const btnNext    = $("btnNext");
+  const btnSpeak   = $("btnSpeak");
 
-  const statLevel  = $("statLevel");
-  const statScore  = $("statScore");
-  const statStreak = $("statStreak");
+  const selRecLang = $("recLang");      // select
+  const chkAntiEcho= $("antiEcho");     // checkbox
 
-  const selMode    = $("selMode");
-  const selQType   = $("selQType");
-  const selTense   = $("selTense");
-  const selVoice   = $("selVoice");
-  const selRecLang = $("selRecLang");
-  const chkAntiEcho = $("chkAntiEcho");
+  // Optional modal (if you have it)
+  const modal      = $("modal");
+  const modalText  = $("modalText");
+  const modalClose = $("modalClose");
 
-  const medalsEl   = $("medals");
-  const medalCount = $("medalCount");
+  function setStatus(msg, tone = "muted") {
+    if (!elStatus) return;
+    elStatus.textContent = msg;
+    elStatus.dataset.tone = tone;
+  }
 
-  const modal     = $("modal");
-  const modalImg  = $("modalImg");
-  const modalText = $("modalText");
+  function setText(el, txt) {
+    if (el) el.textContent = txt;
+  }
 
   // -------------------------
-  // STATE
+  // 1) Content: 100 verbs + 100 words
   // -------------------------
-  const MAX_LEVEL = 100;
-
-  let level = 1;
-  let score = 0;
-  let streak = 0;
-
-  let currentTarget = "";
-  let unitCompleted = false;
-
-  // TTS
-  let ttsVoice = null;
-  let ttsSpeaking = false;
-
-  // Speech Recognition
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let recognizer = null;
-  let sessionActive = false;
-
-  // -------------------------
-  // MEDALS
-  // -------------------------
-  const MEDAL_ROSTER = [
-    { id:"zibra", name:"ZIBRA", img:"assets/medals/zibra.png" },
-    { id:"patapim", name:"PATAPIM", img:"assets/medals/patapim.png" },
-    { id:"gangster", name:"GANGSTER", img:"assets/medals/gangster.png" },
-    { id:"shimpanzinni", name:"SHIMPANZINNI", img:"assets/medals/shimpanzinni.png" },
-    { id:"lirili_larila", name:"LIRILI LARILA", img:"assets/medals/lirili_larila.png" },
-    { id:"frigo_camelo", name:"FRIGO CAMELO", img:"assets/medals/frigo_camelo.png" },
-    { id:"bulbito", name:"BULBITO", img:"assets/medals/bulbito.png" },
-    { id:"bombardino", name:"BOMBARDINO", img:"assets/medals/bombardino.png" },
-    { id:"balerina", name:"BALLERINA", img:"assets/medals/balerina.png" },
-    { id:"burbaloni", name:"BURBALONI", img:"assets/medals/burbaloni.png" },
-    { id:"trulimero", name:"TRULIMERO", img:"assets/medals/trulimero.png" },
-    { id:"tralalero", name:"TRALALERO", img:"assets/medals/tralalero.png" },
-    { id:"bananita", name:"BANANITA", img:"assets/medals/bananita.png" },
-    { id:"havana", name:"HAVANA", img:"assets/medals/havana.png" },
-    { id:"tung_tung", name:"TUNG-TUNG", img:"assets/medals/tung_tung.png" },
+  const VERBS_100 = [
+    "be","have","do","say","go","get","make","know","think","take",
+    "see","come","want","use","find","give","tell","work","call",
+    "try","ask","need","feel","become","leave","put","mean","keep",
+    "let","begin","seem","help","talk","turn","start","show","hear","play",
+    "run","move","live","believe","bring","happen","write","provide","sit","stand",
+    "lose","pay","meet","include","continue","set","learn","change","lead","understand",
+    "watch","follow","stop","create","speak","read","allow","add","spend","grow",
+    "open","walk","win","offer","remember","love","study","practice","build","draw",
+    "cook","clean","listen","travel","drive","dance","sing","laugh","share","choose",
+    "carry","cut","fix","join","plan","record","upload","download","focus","improve"
   ];
 
-  const LS_UNLOCK = "tb_unlocked_v1";
-  const unlocked = new Set(JSON.parse(localStorage.getItem(LS_UNLOCK) || "[]"));
+  const WORDS_100 = [
+    "coffee","water","tea","music","a book","a movie","a game","a song","a podcast","a lesson",
+    "a plan","a sketch","a drawing","a story","a joke","a video","a project","a schedule","a note","a message",
+    "my phone","my laptop","my keys","my bag","my shoes","my jacket","my room","my desk","the window","the door",
+    "a chair","a table","a lamp","a mirror","a plant","a picture","a poster","a toy","a dinosaur","a camera",
+    "a microphone","a notebook","a pen","a pencil","a brush","a palette","a color","a shape","a line","a frame",
+    "a scene","a character","a background","an idea","a dream","a goal","a habit","a break","a snack","a sandwich",
+    "a salad","a pizza","a burger","a fruit","an apple","a banana","a cookie","a cake","a ticket","a map",
+    "a bus","a train","a car","a bike","a street","a park","a café","a store","a school","a studio",
+    "a meeting","a friend","my team","my teacher","a client","a fan","a comment","a like","a playlist","a timer",
+    "a calendar","an email","a call","a test","a quiz","a challenge","a point","a level","a win","a smile"
+  ];
 
-  function renderMedals(){
-    medalCount.textContent = `${unlocked.size}/${MEDAL_ROSTER.length}`;
-    medalsEl.innerHTML = "";
-    for (const m of MEDAL_ROSTER){
-      const div = document.createElement("div");
-      div.className = "medal " + (unlocked.has(m.id) ? "unlocked" : "locked");
-      div.dataset.medalId = m.id;
+  // Short chunks that can be appended progressively
+  const CHUNKS = [
+    "today",
+    "right now",
+    "at home",
+    "in the studio",
+    "after class",
+    "before lunch",
+    "with my friend",
+    "with my team",
+    "for a minute",
+    "for practice",
+    "because I can",
+    "and I feel good",
+    "and I stay calm",
+    "and I keep going",
+    "but it's okay",
+    "so I try again",
+    "to get better",
+    "to learn fast",
+    "to save time",
+    "to have fun"
+  ];
 
-      const img = document.createElement("img");
-      img.src = m.img;
-      img.alt = m.name;
-      img.onerror = () => { img.src = "assets/medals/frigo_camelo.png"; };
-      div.appendChild(img);
+  // Very short starters (keep it simple)
+  const SUBJECTS = ["I", "We", "They", "You"];
+  const OPENERS  = ["I", "I", "I", "We"]; // bias to "I" for learning
 
-      medalsEl.appendChild(div);
+  // -------------------------
+  // 2) Phrase builder (short -> longer)
+  // -------------------------
+  function pickRand(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function buildPhrase(level) {
+    // base: 3 words-ish
+    const subj = pickRand(OPENERS);
+    const verb = pickRand(VERBS_100);
+    const obj  = pickRand(WORDS_100);
+
+    // keep base short
+    let parts = [subj, verb, obj];
+
+    // add 1 chunk every 2 levels, capped
+    const addCount = Math.min(CHUNKS.length, Math.floor((level - 1) / 2));
+    for (let i = 0; i < addCount; i++) {
+      parts.push(CHUNKS[i]);
     }
-  }
 
-  function openUnlockModal(medal){
-    if (!medal) return;
-    modalImg.alt = medal.name || "character";
-    modalImg.src = medal.img || "";
-    modalImg.onerror = () => {
-      modalImg.onerror = null;
-      modalImg.src = "assets/medals/frigo_camelo.png";
-    };
-    modalText.textContent = `Awesome! You rescued: ${medal.name}.`;
-    modal.hidden = false;
-    speak(`You rescued ${medal.name}.`);
-  }
-
-  function closeModal(){ modal.hidden = true; }
-
-  function tryUnlockAtUnitEnd(){
-    if (!unitCompleted || level !== MAX_LEVEL) return;
-    if (unlocked.size >= MEDAL_ROSTER.length) return;
-
-    const medal = MEDAL_ROSTER[unlocked.size];
-    unlocked.add(medal.id);
-    localStorage.setItem(LS_UNLOCK, JSON.stringify([...unlocked]));
-    renderMedals();
-    openUnlockModal(medal);
+    return parts.join(" ").replace(/\s+/g, " ").trim();
   }
 
   // -------------------------
-  // DATA (100 verbs + 100 words/objects)
+  // 3) Mini tolerance (not too strict)
   // -------------------------
-  const SUBJECTS = ["I","you","we","they","he","she"];
-
-  const VERBS = ["work","study","practice","learn","build","make","write","read","watch","listen","speak","think","plan","create","design","draw","animate","edit","record","share","post","upload","download","save","open","close","start","stop","check","fix","improve","change","choose","use","try","repeat","remember","forget","focus","rest","help","meet","call","text","ask","answer","explain","compare","review","test","run","walk","move","carry","bring","send","receive","buy","sell","pay","cook","eat","drink","sleep","wake","clean","wash","drive","ride","travel","arrive","leave","enter","exit","sit","stand","smile","laugh","cry","wait","hope","need","want","like","love","hate","prefer","know","understand","believe","feel","play","win","lose","join","lead","follow","teach","finish","continue"];
-  const WORDS = ["my project","this lesson","English","a plan","the task","my schedule","the meeting","my voice","a sentence","a question","the answer","a new unit","my notes","the timeline","a short phrase","a new idea","my goal","a checklist","the game","the mic","my pronunciation","my grammar","my vocabulary","a verb","a word","a rule","a sample","a draft","the file","the app","the code","the UI","the design","the story","a character","a scene","the animation","a sketch","a storyboard","the script","my team","a client","a friend","my teacher","my class","my phone","my laptop","the browser","the server","the page","the button","the level","the score","the streak","my progress","a result","a mistake","a fix","a new version","a test","today","this week","right now","in the morning","at night","after class","before work","at home","at work","online","with focus","with calm","with energy","with my team","for practice","for fun","for my future","for my job","for my goal","again","slowly","quickly","clearly","loudly","softly","better","again and again","step by step","one more time","every day","because it helps","because it matters","because I can","because I want","so I improve","so I learn","so I finish","so I win","and I smile","and I continue"];
-
-  // mini glossary ES (solo para pistas)
-  const ES = {
-    i:"yo", you:"tú", we:"nosotros", they:"ellos", he:"él", she:"ella",
-    work:"trabajo", study:"estudio", practice:"practico", learn:"aprendo", build:"construyo",
-    make:"hago", write:"escribo", read:"leo", speak:"hablo", listen:"escucho",
-    check:"reviso", improve:"mejoro", fix:"arreglo", plan:"plan", project:"proyecto",
-    today:"hoy", week:"semana", now:"ahora", online:"en línea", home:"casa", mic:"micrófono"
-  };
-
-  function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-  function chance(p){ return Math.random() < p; }
-
-  function clean(s){
-    return String(s)
-      .replace(/\s+/g," ")
-      .replace(/\s+,/g,",")
+  function norm(s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/’/g, "'")
+      .replace(/[^a-z0-9'\s]/g, " ")
+      .replace(/\b(uh|um|like|you know)\b/g, " ")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
-  function tokenize(s){
-    return clean(s)
-      .replace(/[\.,!?]/g,"")
-      .toLowerCase()
-      .split(" ")
-      .filter(Boolean);
+  // Word overlap score (simple, stable)
+  function wordOverlapScore(a, b) {
+    const A = norm(a).split(" ").filter(Boolean);
+    const B = norm(b).split(" ").filter(Boolean);
+    if (!A.length || !B.length) return 0;
+
+    const setB = new Set(B);
+    let hit = 0;
+    for (const w of A) if (setB.has(w)) hit++;
+
+    return hit / Math.max(1, A.length);
   }
 
-  // -------------------------
-  // SHORT PHRASE ENGINE (grow by chunks)
-  // -------------------------
-  // Chunks cortos. Máximo ~18 palabras para que siga liviano.
-  const CHUNKS_TIME  = ["today","now","this week","tonight","later","again"];
-  const CHUNKS_PLACE = ["at home","at work","online","in class","with my team"];
-  const CHUNKS_MOOD  = ["calmly","clearly","slowly","quickly","confidently"];
-  const CHUNKS_LINK  = ["because it helps","so I improve","and I continue","but it's ok","for real"];
-  const CHUNKS_EXTRA = ["one more time","step by step","no cap","with focus","with energy"];
+  // Tiny edit distance (only for short strings)
+  function levenshtein(a, b) {
+    a = norm(a);
+    b = norm(b);
+    const m = a.length, n = b.length;
+    if (!m) return n;
+    if (!n) return m;
 
-  function buildBase(mode, qType, tense){
-    const s = pick(SUBJECTS);
-    const v = pick(VERBS);
-    const w = pick(WORDS);
+    const dp = new Array(n + 1);
+    for (let j = 0; j <= n; j++) dp[j] = j;
 
-    if (mode === "questions") {
-      if (qType === "wh") {
-        const wh = pick(["What","Where","When","Why","How"]);
-        return clean(`${wh} do ${s.toLowerCase()} ${v}?`);
+    for (let i = 1; i <= m; i++) {
+      let prev = dp[0];
+      dp[0] = i;
+      for (let j = 1; j <= n; j++) {
+        const temp = dp[j];
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[j] = Math.min(
+          dp[j] + 1,      // delete
+          dp[j - 1] + 1,  // insert
+          prev + cost     // substitute
+        );
+        prev = temp;
       }
-      return clean(`Do ${s.toLowerCase()} ${v} ${w}?`);
     }
-
-    if (tense === "present_cont") {
-      const be = (s==="I") ? "am" : (s==="he"||s==="she") ? "is" : "are";
-      const ing = v.endsWith("e") ? (v.slice(0,-1)+"ing") : (v+"ing");
-      return clean(`${s} ${be} ${ing} ${w}.`);
-    }
-    if (tense === "future_will") {
-      return clean(`${s} will ${v} ${w}.`);
-    }
-    if (tense === "present_perf") {
-      const have = (s==="he"||s==="she") ? "has" : "have";
-      return clean(`${s} ${have} ${v} ${w} already.`);
-    }
-
-    // default present simple
-    return clean(`${s} ${v} ${w}.`);
+    return dp[n];
   }
 
-  function addChunk(sentence, mode, chunk){
-    if (!chunk) return sentence;
+  function similarity(a, b) {
+    // Combine overlap + (small) edit similarity
+    const overlap = wordOverlapScore(a, b);
 
-    if (mode === "questions") {
-      if (sentence.endsWith("?")) {
-        const core = sentence.slice(0,-1);
-        return clean(`${core} ${chunk}?`);
-      }
-      return clean(`${sentence} ${chunk}?`);
-    }
+    const na = norm(a), nb = norm(b);
+    const maxLen = Math.max(1, Math.max(na.length, nb.length));
+    const dist = levenshtein(na, nb);
+    const editSim = 1 - (dist / maxLen);
 
-    if (sentence.endsWith(".")) {
-      const core = sentence.slice(0,-1);
-      return clean(`${core} ${chunk}.`);
-    }
-    return clean(`${sentence} ${chunk}.`);
+    // Weighted
+    return 0.7 * overlap + 0.3 * editSim;
   }
 
-  function tooLong(sentence){
-    return tokenize(sentence).length > 18;
-  }
-
-  function buildLevels(base, mode){
-    const lvls = [clean(base)];
-    const pools = [CHUNKS_TIME, CHUNKS_PLACE, CHUNKS_MOOD, CHUNKS_LINK, CHUNKS_EXTRA];
-
-    let s = lvls[0];
-    let poolIndex = 0;
-
-    while (lvls.length < MAX_LEVEL) {
-      const chunk = pick(pools[poolIndex % pools.length]);
-      let next = addChunk(s, mode, chunk);
-
-      // keep it short: if it gets too long, restart from base and grow again
-      if (tooLong(next)) {
-        s = lvls[0];
-        next = addChunk(s, mode, chunk);
-      } else {
-        s = next;
-      }
-
-      // tiny spice (rare) but still short
-      if (mode !== "questions" && chance(0.10)) {
-        next = next.replace(/^I\b/, "Today, I").replace(/^You\b/, "Today, you");
-        next = clean(next);
-      }
-
-      lvls.push(next);
-      poolIndex++;
-    }
-
-    return lvls;
+  // Pass threshold: start forgiving, get slightly stricter later
+  function passThreshold(level) {
+    // level 1..10 forgiving, later a bit stricter
+    if (level < 10) return 0.68;
+    if (level < 30) return 0.72;
+    return 0.76;
   }
 
   // -------------------------
-  // UI helpers
+  // 4) Speech recognition + warm up
   // -------------------------
-  function setStatus(msg, tone="muted"){
-    statusEl.textContent = msg;
-    statusEl.style.color =
-      (tone==="ok") ? "var(--ok)" :
-      (tone==="warn") ? "var(--warn)" :
-      "var(--muted)";
-  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let listening = false;
+  let retryNoSpeech = 0;
+  let lastHeard = "";
 
-  function renderStats(){
-    statLevel.textContent = String(level);
-    statScore.textContent = String(score);
-    statStreak.textContent = String(streak);
-  }
-
-  function renderTarget(){
-    targetText.textContent = currentTarget || "—";
-  }
-
-  // -------------------------
   // TTS
-  // -------------------------
-  function loadVoices(){
-    if (!window.speechSynthesis) return;
-
-    const voices = speechSynthesis.getVoices();
-    selVoice.innerHTML = "";
-
-    voices
-      .filter(v => /en/i.test(v.lang))
-      .forEach(v => {
-        const opt = document.createElement("option");
-        opt.value = v.name;
-        opt.textContent = `${v.name} — ${v.lang}`;
-        selVoice.appendChild(opt);
-      });
-
-    if (selVoice.options.length) {
-      selVoice.value = selVoice.options[0].value;
-      selectVoice();
-    }
-  }
-
-  function selectVoice(){
-    if (!window.speechSynthesis) return;
-    const voices = speechSynthesis.getVoices();
-    ttsVoice = voices.find(v => v.name === selVoice.value) || null;
-  }
-
-  function speak(text){
-    if (!window.speechSynthesis || !text) return;
+  let ttsSpeaking = false;
+  function speak(text) {
+    if (!("speechSynthesis" in window)) return;
     try {
-      speechSynthesis.cancel();
+      window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(text);
-      u.lang = selRecLang.value || "en-US";
-      if (ttsVoice) u.voice = ttsVoice;
-
-      ttsSpeaking = true;
+      u.lang = (selRecLang && selRecLang.value) ? selRecLang.value : "en-US";
+      u.rate = 1.0;
+      u.onstart = () => { ttsSpeaking = true; };
       u.onend = () => { ttsSpeaking = false; };
       u.onerror = () => { ttsSpeaking = false; };
-
-      speechSynthesis.speak(u);
-    } catch(e) {}
+      window.speechSynthesis.speak(u);
+    } catch {}
   }
 
-  // -------------------------
-  // MIC — warm-up + retry
-  // -------------------------
-  async function primeMic(){
-    if (!navigator.mediaDevices?.getUserMedia) return true;
+  async function primeMic() {
+    // Warm up audio permission channel → reduces "no-speech"
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(t => t.stop());
       return true;
-    } catch(e) {
+    } catch {
       return false;
     }
   }
 
-  let __micRetry = 0;
-  const __MIC_RETRY_MAX = 2;
-
-  function ensureRecognizer(){
+  function ensureRecognizer() {
     if (!SR) {
-      setStatus("Speech recognition is not supported in this browser.", "warn");
+      setStatus("SpeechRecognition not supported in this browser.", "warn");
       return false;
     }
     if (recognizer) return true;
 
     recognizer = new SR();
-    recognizer.interimResults = false;
     recognizer.continuous = false;
+    recognizer.interimResults = true;
+    recognizer.maxAlternatives = 5;
 
-    recognizer.onresult = (e) => {
-      const t = (e.results && e.results[0] && e.results[0][0]) ? e.results[0][0].transcript : "";
-      heardText.value = t;
-      setStatus("Heard. Press Check.", "ok");
+    recognizer.onstart = () => {
+      listening = true;
+      retryNoSpeech = 0;
+      setStatus("Listening… speak now.", "muted");
+      if (btnMic) btnMic.textContent = "🛑 Stop mic";
     };
 
-    recognizer.onerror = async (e) => {
-      const err = e?.error ? String(e.error) : "unknown";
+    recognizer.onresult = (e) => {
+      const res = e.results[e.resultIndex];
+      if (!res || !res.length) return;
 
-      if (err === "not-allowed" || err === "service-not-allowed" || err === "permission-denied") {
-        sessionActive = false;
-        btnMic.textContent = "🎙️ Start mic";
-        setStatus("Mic blocked. Allow microphone permission for this site.", "warn");
+      // pick best by confidence
+      let best = res[0];
+      for (let i = 1; i < res.length; i++) {
+        const c = res[i].confidence || 0;
+        const cb = best.confidence || 0;
+        if (c > cb) best = res[i];
+      }
+
+      const text = (best.transcript || "").trim();
+      if (text) {
+        lastHeard = text;
+        setText(elHeard, text);
+      }
+
+      // If final result arrives, stop status
+      if (res.isFinal) {
+        setStatus("Heard. Press CHECK.", "ok");
+      }
+    };
+
+    recognizer.onerror = (e) => {
+      const err = e?.error || "unknown";
+      listening = false;
+      if (btnMic) btnMic.textContent = "🎙️ Start mic";
+
+      if (err === "no-speech") {
+        // auto retry a couple times
+        if (retryNoSpeech < 2) {
+          retryNoSpeech++;
+          setStatus("No speech… retrying.", "warn");
+          setTimeout(() => {
+            try { recognizer.start(); } catch {}
+          }, 350);
+          return;
+        }
+        setStatus("No speech detected. Speak closer / louder.", "warn");
         return;
       }
 
-      if (err === "no-speech") {
-        if (__micRetry < __MIC_RETRY_MAX && sessionActive) {
-          __micRetry++;
-          setStatus(`Mic: no speech — try again (${__micRetry}/${__MIC_RETRY_MAX}).`, "warn");
-          try { recognizer.abort(); } catch(_){}
-          await new Promise(r => setTimeout(r, 350));
-          try { recognizer.start(); return; } catch(_){}
-        }
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        setStatus("Mic blocked. Allow microphone in browser settings.", "warn");
+        return;
       }
 
-      sessionActive = false;
-      btnMic.textContent = "🎙️ Start mic";
       setStatus(`Mic error: ${err}`, "warn");
     };
 
     recognizer.onend = () => {
-      if (sessionActive) {
-        sessionActive = false;
-        btnMic.textContent = "🎙️ Start mic";
-      }
+      listening = false;
+      if (btnMic) btnMic.textContent = "🎙️ Start mic";
+      // Do not override status if already ok/warn
     };
 
     return true;
   }
 
-  async function startMic(){
+  async function startMic() {
     if (!ensureRecognizer()) return;
 
-    if (chkAntiEcho.checked && ttsSpeaking) {
-      setStatus("Wait—voice is speaking.", "warn");
+    if (chkAntiEcho && chkAntiEcho.checked && ttsSpeaking) {
+      setStatus("Wait… voice is speaking.", "warn");
       return;
     }
-
-    recognizer.lang = selRecLang.value || "en-US";
 
     const ok = await primeMic();
     if (!ok) {
-      setStatus("Mic blocked at OS/browser level. Check permissions.", "warn");
+      setStatus("Mic blocked by system/browser. Check permissions.", "warn");
       return;
     }
 
-    __micRetry = 0;
-    sessionActive = true;
-    btnMic.textContent = "🛑 Stop mic";
-    setStatus("Listening… speak now.", "muted");
+    recognizer.lang = (selRecLang && selRecLang.value) ? selRecLang.value : "en-US";
 
     try {
       recognizer.start();
-    } catch (err) {
-      sessionActive = false;
-      btnMic.textContent = "🎙️ Start mic";
+    } catch {
       setStatus("Mic start failed. Try again.", "warn");
     }
   }
 
-  function stopMic(){
-    sessionActive = false;
-    btnMic.textContent = "🎙️ Start mic";
-    try { recognizer?.stop(); } catch(e) {}
-    setStatus("Stopped.", "muted");
+  function stopMic() {
+    if (!recognizer) return;
+    try { recognizer.stop(); } catch {}
   }
 
   // -------------------------
-  // Glossary (mini)
+  // 5) Game state
   // -------------------------
-  function showGlossary(){
-    const words = tokenize(currentTarget);
-    const uniq = [...new Set(words)].slice(0, 18);
-    const lines = uniq.map(w => `${w} = ${ES[w] || "—"}`);
-    glossary.innerHTML = `<b>ES glossary:</b><br>` + lines.join("<br>");
-    glossary.hidden = false;
+  let level = 1;
+  let score = 0;
+  let streak = 0;
+  let target = "";
+
+  function render() {
+    setText(elLevel, String(level));
+    setText(elScore, String(score));
+    setText(elStreak, String(streak));
+    setText(elTarget, target);
   }
 
-  // -------------------------
-  // Check (feedback)
-  // -------------------------
-  function diffWords(expected, got){
-    const e = tokenize(expected);
-    const g = tokenize(got);
-    const bad = new Set();
-    const n = Math.max(e.length, g.length);
-    for (let i=0;i<n;i++) {
-      if ((e[i]||"") !== (g[i]||"")) {
-        if (e[i]) bad.add(e[i]);
-      }
-    }
-    return { bad:[...bad] };
+  function newRound() {
+    target = buildPhrase(level);
+    setText(elHeard, "");
+    lastHeard = "";
+    render();
+    setStatus("Press 🎙️ and say the sentence.", "muted");
   }
 
-  function renderFeedback(expected, heard){
-    const { bad } = diffWords(expected, heard);
+  function checkAnswer() {
+    if (!target) return;
 
-    if (!heard.trim()) {
-      feedback.innerHTML = "—";
+    const mic = lastHeard || (elHeard ? elHeard.textContent : "");
+    if (!mic || !mic.trim()) {
+      setStatus("I heard nothing. Press 🎙️ and speak.", "warn");
       return;
     }
 
-    if (bad.length === 0) {
-      feedback.innerHTML = `<span style="color:var(--ok); font-weight:900;">Perfect!</span> ✅`;
-      return;
-    }
+    const sim = similarity(mic, target);
+    const thr = passThreshold(level);
 
-    const html = bad.map(w => `<span style="color:var(--warn); font-weight:900;">${w}</span>`).join(", ");
-    feedback.innerHTML = `Practice: ${html}`;
-  }
-
-  // -------------------------
-  // Unit / Levels
-  // -------------------------
-  let levels = [];
-
-  function newUnit(){
-    unitCompleted = false;
-    modal.hidden = true;
-
-    level = 1;
-    score = 0;
-    streak = 0;
-
-    heardText.value = "";
-    feedback.innerHTML = "—";
-    glossary.hidden = true;
-
-    const mode = selMode.value;
-    const qType = selQType.value;
-    const tense = selTense.value;
-
-    const base = buildBase(mode, qType, tense);
-    levels = buildLevels(base, mode);
-
-    currentTarget = levels[0];
-    renderTarget();
-    renderStats();
-    setStatus("New unit ready.", "ok");
-  }
-
-  function nextLevel(){
-    level = Math.min(MAX_LEVEL, level + 1);
-
-    if (level === MAX_LEVEL && score >= MAX_LEVEL && !unitCompleted) {
-      unitCompleted = true;
-      tryUnlockAtUnitEnd();
-    }
-
-    currentTarget = levels[level-1];
-    renderTarget();
-    renderStats();
-  }
-
-  // -------------------------
-  // Events
-  // -------------------------
-  btnNew.addEventListener("click", newUnit);
-
-  btnSpeak.addEventListener("click", () => speak(currentTarget));
-
-  btnMic.addEventListener("click", () => {
-    if (sessionActive) stopMic();
-    else startMic();
-  });
-
-  btnTranslate.addEventListener("click", showGlossary);
-
-  btnShow.addEventListener("click", () => {
-    heardText.value = currentTarget;
-    setStatus("Answer shown.", "muted");
-  });
-
-  btnCheck.addEventListener("click", () => {
-    const heard = heardText.value || "";
-    renderFeedback(currentTarget, heard);
-
-    const { bad } = diffWords(currentTarget, heard);
-
-    if (heard.trim() && bad.length === 0) {
+    if (sim >= thr) {
       streak++;
-      score += 1;
-      setStatus("Nice! Next level.", "ok");
-      nextLevel();
+      score += 10 + Math.min(10, streak); // small bonus
+      setStatus(`Nice! ✅ (match ${(sim*100).toFixed(0)}%)`, "ok");
+
+      // Optional: tiny celebratory modal
+      if (modal && modalText) {
+        modalText.textContent = `Good! Keep going. (+${10 + Math.min(10, streak)} pts)`;
+        modal.hidden = false;
+      }
     } else {
       streak = 0;
-      setStatus("Not yet—fix the red words and try again.", "warn");
+      setStatus(`Almost. Try again. (match ${(sim*100).toFixed(0)}%)`, "warn");
     }
-    renderStats();
-  });
 
-  btnSkip.addEventListener("click", () => {
-    streak = 0;
-    setStatus("Skipped.", "muted");
-    nextLevel();
-  });
-
-  btnModalOk.addEventListener("click", () => {
-    closeModal();
-    setStatus("Unit complete! Press New unit.", "ok");
-  });
-
-  selVoice.addEventListener("change", selectVoice);
-  selRecLang.addEventListener("change", () => {
-    if (recognizer) recognizer.lang = selRecLang.value;
-  });
-
-  // -------------------------
-  // Init
-  // -------------------------
-  renderMedals();
-
-  if (window.speechSynthesis) {
-    speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
+    render();
   }
 
-  newUnit();
+  function nextLevel() {
+    level++;
+    newRound();
+  }
+
+  // -------------------------
+  // 6) Wire UI
+  // -------------------------
+  function requireEl(name, el) {
+    if (!el) console.warn(`Missing element id="${name}" in HTML.`);
+  }
+  requireEl("targetText", elTarget);
+  requireEl("heardText", elHeard);
+  requireEl("statusText", elStatus);
+  requireEl("btnMic", btnMic);
+  requireEl("btnCheck", btnCheck);
+  requireEl("btnNext", btnNext);
+
+  if (btnMic) {
+    btnMic.addEventListener("click", () => {
+      if (listening) stopMic();
+      else startMic();
+    });
+  }
+
+  if (btnCheck) btnCheck.addEventListener("click", checkAnswer);
+  if (btnNext)  btnNext.addEventListener("click", nextLevel);
+
+  if (btnSpeak) {
+    btnSpeak.addEventListener("click", () => {
+      if (!target) return;
+      speak(target);
+    });
+  }
+
+  if (modalClose && modal) {
+    modalClose.addEventListener("click", () => { modal.hidden = true; });
+  }
+  // click outside closes modal
+  if (modal) {
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.hidden = true;
+    });
+  }
+
+  // -------------------------
+  // 7) Init
+  // -------------------------
+  // Default language: US English
+  if (selRecLang && !selRecLang.value) selRecLang.value = "en-US";
+
+  newRound();
 })();
